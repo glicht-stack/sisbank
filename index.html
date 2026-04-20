@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SisBank — Contabilidad Bancaria</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<!-- Librerías de procesamiento -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --ink:#0f1117;--ink2:#3a3d4a;--ink3:#6b7280;
+  --bg:#f7f8fa;--surface:#ffffff;--surface2:#f0f2f5;
+  --accent:#1a56db;--accent2:#0e3fa3;--accent-pale:#e8effe;
+  --green:#0d7a4e;--green-pale:#e6f5ee;
+  --red:#c0392b;--red-pale:#fdf0ef;
+  --border:#e2e5ec;--border2:#cbd5e1;--radius:12px;
+}
+
+body{font-family:'Sora',sans-serif;background:var(--bg);color:var(--ink);overflow-x:hidden}
+
+/* --- SETUP OVERLAY --- */
+#setup-overlay {
+  position:fixed;inset:0;background:rgba(15,17,23,0.95);
+  display:flex;justify-content:center;align-items:center;z-index:9999;backdrop-filter:blur(10px);
+}
+.setup-card {
+  background:white;padding:3rem;border-radius:24px;max-width:500px;width:90%;text-align:center;
+  box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);
+}
+.upload-zone {
+  border:2px dashed var(--border2);padding:3rem;border-radius:16px;margin:2rem 0;
+  cursor:pointer;transition:0.3s;background:var(--bg);
+}
+.upload-zone:hover {border-color:var(--accent);background:var(--accent-pale)}
+
+/* --- HEADER & NAV --- */
+header{background:var(--ink);color:white;padding:1.2rem 2.5rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100}
+.logo{font-weight:700;font-size:1.4rem;letter-spacing:-0.5px}
+.logo span{color:var(--accent)}
+
+nav{display:flex;gap:0.5rem;background:rgba(255,255,255,0.05);padding:0.4rem;border-radius:14px}
+nav button{background:transparent;border:none;color:var(--ink3);padding:0.6rem 1.2rem;border-radius:10px;cursor:pointer;font-weight:600;font-family:inherit;transition:0.2s}
+nav button:hover{color:white}
+nav button.active{background:var(--accent);color:white}
+
+/* --- MAIN --- */
+main{max-width:1400px;margin:2rem auto;padding:0 1.5rem}
+.view{display:none}
+.view.active{display:block;animation:viewFade 0.4s ease}
+@keyframes viewFade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+.card{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);margin-bottom:2rem;overflow:hidden}
+.card-header{padding:1.5rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+
+/* --- FORMULARIO DIARIO --- */
+.entry-form{padding:1.5rem;background:var(--surface2)}
+.entry-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1.5rem;margin-bottom:1.5rem}
+.form-group label{display:block;font-size:0.75rem;font-weight:700;margin-bottom:0.5rem;color:var(--ink2)}
+
+.line-row{display:grid;grid-template-columns:160px 1fr 70px 120px 120px 120px 50px;gap:12px;margin-bottom:10px;align-items:start}
+.btn-toggle-type{padding:0.75rem 0.5rem;border-radius:8px;font-weight:700;font-size:0.7rem;border:none;cursor:pointer;transition:0.2s;width:100%}
+.btn-debe{background:var(--accent-pale);color:var(--accent);}
+.btn-haber{background:var(--ink2);color:white;}
+.autocomplete-wrapper{position:relative}
+.suggestions{position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,0.1);max-height:220px;overflow-y:auto;z-index:100;display:none}
+.suggestion-item{padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--bg);font-size:0.8rem; line-height: 1.2;}
+.suggestion-item:hover{background:var(--accent-pale)}
+.btn-create-acc{background:var(--green-pale); color:var(--green); font-weight:700; text-align:center; padding:12px; border-top:1px solid var(--border)}
+
+input,select{width:100%;padding:0.75rem 1rem;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:0.9rem}
+input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-pale)}
+.mono{font-family:'JetBrains Mono',monospace;font-size:0.85rem}
+.text-right{text-align:right}
+
+/* --- BUTTONS --- */
+.btn{padding:0.75rem 1.5rem;border-radius:10px;font-weight:600;cursor:pointer;transition:0.2s;font-family:inherit;border:none;display:inline-flex;align-items:center;gap:8px}
+.btn-primary{background:var(--accent);color:white}
+.btn-primary:hover{background:var(--accent2)}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--ink2)}
+.btn-outline:hover{background:var(--surface2)}
+.btn-danger{color:var(--red);background:var(--red-pale)}
+
+/* --- TABLAS --- */
+table{width:100%;border-collapse:collapse}
+th{padding:1rem;background:var(--bg);font-size:0.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--ink3);border-bottom:2px solid var(--border)}
+td{padding:1rem;border-bottom:1px solid var(--border);font-size:0.9rem}
+
+/* --- TOTALS BAR --- */
+.totals-bar{display:flex;gap:2rem;background:var(--ink);color:white;padding:1.2rem 2rem;border-radius:16px;margin-top:1.5rem;justify-content:flex-end}
+.total-item{display:flex;flex-direction:column;align-items:flex-end}
+.total-item label{font-size:0.65rem;color:var(--ink3);text-transform:uppercase;font-weight:700}
+.total-item span{font-family:'JetBrains Mono';font-size:1.2rem}
+
+/* --- PRUEBA DE VIDA CATÁLOGO --- */
+.stats-badge {
+    background: var(--accent-pale); color: var(--accent); padding: 6px 16px;
+    border-radius: 50px; font-weight: 700; font-size: 0.8rem; border: 1px solid var(--accent);
+}
+
+#toast{position:fixed;bottom:2rem;right:2rem;background:var(--ink);color:white;padding:1rem 2rem;border-radius:12px;transform:translateY(100px);opacity:0;transition:0.3s;z-index:9999}
+#toast.show{transform:translateY(0);opacity:1}
+</style>
+</head>
+<body>
+
+<!-- OVERLAY DE CARGA SI NO HAY STORAGE -->
+<div id="setup-overlay" style="display:none">
+    <div class="setup-card">
+        <h2 style="font-size:2rem;letter-spacing:-1px">Inicializar Motor CUC</h2>
+        <p style="color:var(--ink3);margin:1rem 0">Sube el archivo CSV con el catálogo bancario oficial para comenzar.</p>
+        <input type="file" id="csv-input" accept=".csv" style="display:none">
+        <div class="upload-zone" onclick="document.getElementById('csv-input').click()">
+            <div style="font-size:3rem">📂</div>
+            <p>Haz clic para seleccionar el archivo</p>
+            <span style="font-size:0.7rem;color:var(--ink3)">(Columnas requeridas: CÓDIGO, NOMBRE DE CUENTA)</span>
+        </div>
+    </div>
+</div>
+
+<header>
+    <div class="logo">SisBank<span>PRO</span></div>
+    <div style="display:flex;align-items:center;gap:2rem">
+        <div id="db-status" style="font-size:0.7rem;font-weight:700;background:rgba(255,255,255,0.1);padding:0.4rem 1rem;border-radius:20px">Iniciando...</div>
+        <nav>
+            <button onclick="navigate('diario')" id="nav-diario" class="active">Libro Diario</button>
+            <button onclick="navigate('catalogo')" id="nav-catalogo">Catálogo</button>
+        </nav>
+    </div>
+</header>
+
+<main>
+    <!-- VISTA: LIBRO DIARIO -->
+    <section id="view-diario" class="view active">
+        <div class="card">
+            <div class="card-header">
+                <h2>Voucher Contable</h2>
+                <div style="display:flex;gap:0.75rem">
+                    <button class="btn btn-outline" onclick="resetDB()">Limpiar BD</button>
+                    <button class="btn btn-primary" onclick="exportExcel()">⬇ Exportar Diario</button>
+                </div>
+            </div>
+            
+            <div class="entry-form">
+                <div class="entry-grid">
+                    <div class="form-group">
+                        <label>FECHA CONTABLE</label>
+                        <input type="date" id="entry-date">
+                    </div>
+                    <div class="form-group">
+                        <label>CONCEPTO / GLOSA GENERAL</label>
+                        <input type="text" id="entry-glosa" placeholder="Descripción de la transacción...">
+                    </div>
+                </div>
+
+                <div id="lines-container"></div>
+                
+                <div style="margin-top:1.5rem;display:flex;justify-content:space-between;align-items:center">
+                    <button class="btn btn-outline" onclick="addLine()">+ Añadir Fila</button>
+                    <button class="btn btn-primary" onclick="postEntry()" style="padding:1rem 2.5rem">Postear Asiento</button>
+                </div>
+
+                <div class="totals-bar">
+                    <div class="total-item"><label>Total Debe</label><span id="total-debe">0.00</span></div>
+                    <div class="total-item"><label>Total Haber</label><span id="total-haber">0.00</span></div>
+                    <div class="total-item"><label>Diferencia</label><span id="total-diff">0.00</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><h3>Asientos Recientes</h3></div>
+            <div style="overflow-x:auto">
+                <table id="journal-table">
+                    <thead>
+                        <tr>
+                            <th style="width:100px">Fecha</th>
+                            <th style="width:150px">Código</th>
+                            <th>Cuenta / Glosa</th>
+                            <th class="text-right">Parcial</th>
+                            <th class="text-right">Debe</th>
+                            <th class="text-right">Haber</th>
+                        </tr>
+                    </thead>
+                    <tbody id="journal-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- VISTA: CATÁLOGO -->
+    <section id="view-catalogo" class="view">
+        <div class="card">
+            <div class="card-header">
+                <div style="display:flex;flex-direction:column;gap:5px">
+                    <h2 style="font-size:1.4rem">Catálogo Único de Cuentas (CUC)</h2>
+                    <div id="catalog-counter" class="stats-badge">Contando registros...</div>
+                </div>
+                <div style="width:400px">
+                    <input type="text" id="cat-search" placeholder="Buscar por código o nombre..." oninput="renderCatalog()">
+                </div>
+            </div>
+            <div style="max-height:70vh;overflow-y:auto">
+                <table>
+                    <thead style="position:sticky;top:0;z-index:5">
+                        <tr>
+                            <th style="width:180px">Código</th>
+                            <th>Nombre de la Cuenta</th>
+                            <th>Nivel</th>
+                        </tr>
+                    </thead>
+                    <tbody id="catalog-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+</main>
+
+<div id="toast">Notificación</div>
+
+<script>
+/**
+ * MOTOR SISBANK PRO - RECONSTRUIDO CON CREACIÓN DE CUENTAS
+ */
+let dbCatalog = [];
+let journal = [];
+const STORAGE_CUC = 'sisbank_cuc_db';
+const STORAGE_JOURNAL = 'sisbank_journal_db';
+
+// --- INICIO ---
+window.onload = () => {
+    const storedCUC = localStorage.getItem(STORAGE_CUC);
+    const storedJournal = localStorage.getItem(STORAGE_JOURNAL);
+
+    if(storedJournal) journal = JSON.parse(storedJournal);
+
+    if(storedCUC) {
+        dbCatalog = JSON.parse(storedCUC);
+        initApp();
+    } else {
+        document.getElementById('setup-overlay').style.display = 'flex';
+    }
+};
+
+function initApp() {
+    document.getElementById('setup-overlay').style.display = 'none';
+    document.getElementById('db-status').textContent = `DB: ${dbCatalog.length} registros`;
+    document.getElementById('entry-date').valueAsDate = new Date();
+    
+    // Preparar formulario
+    document.getElementById('lines-container').innerHTML = '';
+    for(let i=0; i<3; i++) addLine();
+    
+    renderJournal();
+    if(document.getElementById('view-catalogo').classList.contains('active')) renderCatalog();
+}
+
+// --- PROCESAMIENTO CSV ---
+document.getElementById('csv-input').onchange = (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+
+    Papa.parse(file, {
+        header: true,
+        complete: (results) => {
+            const cleanData = results.data.map(row => {
+                const code = (row['CÓDIGO'] || row['CODIGO'] || '').toString().replace(/['\s]/g, '').trim();
+                const name = (row['NOMBRE DE CUENTA'] || row['CUENTA'] || '').toString().trim();
+                return { c: code, n: name, l: code.length <= 1 ? 1 : (code.length <= 2 ? 2 : (code.length <= 4 ? 3 : 4)) };
+            }).filter(x => x.c && x.n);
+
+            if(cleanData.length > 0) {
+                dbCatalog = cleanData;
+                localStorage.setItem(STORAGE_CUC, JSON.stringify(dbCatalog));
+                initApp();
+                showToast(`Motor activado: ${dbCatalog.length} cuentas.`);
+            } else {
+                alert("Formato no válido. Verifica las columnas.");
+            }
+        }
+    });
+};
+
+// --- LÓGICA VOUCHER ---
+function addLine() {
+    const id = Date.now() + Math.random();
+    const html = `
+        <div class="line-row" id="row-${id}">
+            <div class="autocomplete-wrapper">
+                <input type="text" class="input-code mono" placeholder="Código o Nombre..." oninput="handleSearch(this)">
+                <div class="suggestions"></div>
+            </div>
+            <input type="text" class="input-name" placeholder="Cuenta..." readonly style="background:var(--bg)">
+            <button type="button" class="btn-toggle-type btn-debe" data-type="D" onclick="toggleType(this)">DEBE</button>
+            <input type="number" step="0.01" class="input-parcial text-right mono" placeholder="0.00">
+            <input type="number" step="0.01" class="input-debe text-right mono" placeholder="0.00" oninput="calcTotals()">
+            <input type="number" step="0.01" class="input-haber text-right mono" placeholder="0.00" oninput="calcTotals()">
+            <button class="btn btn-danger" onclick="document.getElementById('row-${id}').remove(); calcTotals()">✕</button>
+        </div>
+    `;
+    document.getElementById('lines-container').insertAdjacentHTML('beforeend', html);
+}
+
+function toggleType(btn) {
+    if(btn.dataset.type === 'D') {
+        btn.dataset.type = 'H';
+        btn.textContent = 'HABER';
+        btn.className = 'btn-toggle-type btn-haber';
+    } else {
+        btn.dataset.type = 'D';
+        btn.textContent = 'DEBE';
+        btn.className = 'btn-toggle-type btn-debe';
+    }
+}
+
+/**
+ * BUSCADOR MEJORADO CON OPCIÓN DE CREAR CUENTA
+ */
+function handleSearch(el) {
+    const query = el.value.trim().toLowerCase();
+    const suggest = el.nextElementSibling;
+    if(!query) { suggest.style.display = 'none'; return; }
+
+    const rowId = el.closest('.line-row').id;
+
+    // Filtrado y ordenamiento inteligente
+    const matches = dbCatalog
+        .filter(x => x.c.includes(query) || x.n.toLowerCase().includes(query))
+        .sort((a, b) => {
+            const aStart = a.c.startsWith(query);
+            const bStart = b.c.startsWith(query);
+            if (aStart && !bStart) return -1;
+            if (!aStart && bStart) return 1;
+            return a.c.localeCompare(b.c, undefined, {numeric: true});
+        })
+        .slice(0, 15);
+
+    let html = matches.map(m => `
+        <div class="suggestion-item" onclick="selectAcc('${rowId}', '${m.c}', '${m.n.replace(/'/g, "")}')">
+            <div style="font-weight:600; color:var(--accent); font-family:'JetBrains Mono'; font-size:0.85rem">${m.c}</div>
+            <div style="font-size:0.75rem; color:var(--ink2)">${m.n}</div>
+        </div>
+    `).join('');
+
+    // Si no hay match exacto por código o nombre, permitir crearla
+    const exactMatch = dbCatalog.find(x => x.c === query || x.n.toLowerCase() === query);
+    if (!exactMatch) {
+        html += `
+            <div class="suggestion-item btn-create-acc" onclick="promptCreateAcc('${rowId}', '${query}')">
+                + Crear cuenta "${query}"
+            </div>
+        `;
+    }
+
+    if(html) {
+        suggest.innerHTML = html;
+        suggest.style.display = 'block';
+    } else {
+        suggest.style.display = 'none';
+    }
+}
+
+/**
+ * FUNCIÓN PARA CREAR CUENTA SOBRE LA MARCHA
+ */
+function promptCreateAcc(rowId, query) {
+    let code = "";
+    let name = "";
+
+    // Si el query parece un código (solo números), pedimos el nombre
+    if(/^\d+$/.test(query)) {
+        code = query;
+        name = prompt("Ingrese el NOMBRE para el código " + code);
+    } else {
+        // Si el query es texto, pedimos el código
+        name = query.toUpperCase();
+        code = prompt("Ingrese el CÓDIGO para la cuenta: " + name);
+    }
+
+    if(code && name) {
+        const newAcc = { 
+            c: code.trim(), 
+            n: name.trim(), 
+            l: code.length <= 4 ? 3 : 4 // Estimación simple de nivel
+        };
+        
+        // Verificar si el código ya existe (por si acaso)
+        if(dbCatalog.some(x => x.c === newAcc.c)) {
+            alert("Este código ya existe.");
+            return;
+        }
+
+        dbCatalog.push(newAcc);
+        // Guardar permanentemente
+        localStorage.setItem(STORAGE_CUC, JSON.stringify(dbCatalog));
+        
+        // Actualizar UI
+        document.getElementById('db-status').textContent = `DB: ${dbCatalog.length} registros`;
+        selectAcc(rowId, newAcc.c, newAcc.n);
+        showToast("Cuenta creada y guardada.");
+    }
+}
+
+function selectAcc(rowId, code, name) {
+    const row = document.getElementById(rowId);
+    row.querySelector('.input-code').value = code;
+    row.querySelector('.input-name').value = name;
+    row.querySelector('.suggestions').style.display = 'none';
+}
+
+function calcTotals() {
+    let d = 0, h = 0;
+    document.querySelectorAll('.input-debe').forEach(el => d += parseFloat(el.value || 0));
+    document.querySelectorAll('.input-haber').forEach(el => h += parseFloat(el.value || 0));
+    
+    document.getElementById('total-debe').textContent = d.toFixed(2);
+    document.getElementById('total-haber').textContent = h.toFixed(2);
+    const diff = Math.abs(d - h);
+    document.getElementById('total-diff').textContent = diff.toFixed(2);
+    document.getElementById('total-diff').style.color = diff < 0.01 ? 'var(--green)' : 'var(--red)';
+}
+
+function postEntry() {
+    const date = document.getElementById('entry-date').value;
+    const glosa = document.getElementById('entry-glosa').value;
+    const totD = parseFloat(document.getElementById('total-debe').textContent);
+    const totH = parseFloat(document.getElementById('total-haber').textContent);
+
+    if(!date || !glosa) return alert("Fecha y Glosa obligatorias");
+    if(Math.abs(totD - totH) > 0.01 || totD === 0) return alert("Asiento descuadrado o vacío");
+
+    const lines = [];
+    document.querySelectorAll('.line-row').forEach(row => {
+        const c = row.querySelector('.input-code').value;
+        const n = row.querySelector('.input-name').value;
+        const typeBtn = row.querySelector('.btn-toggle-type');
+        if(c && n) {
+            lines.push({
+                c, n, 
+                t: typeBtn ? typeBtn.dataset.type : null,
+                p: parseFloat(row.querySelector('.input-parcial').value || 0),
+                d: parseFloat(row.querySelector('.input-debe').value || 0),
+                h: parseFloat(row.querySelector('.input-haber').value || 0)
+            });
+        }
+    });
+
+    journal.push({ id: Date.now(), date, glosa, lines });
+    localStorage.setItem(STORAGE_JOURNAL, JSON.stringify(journal));
+    
+    showToast("Asiento posteado.");
+    initApp();
+    document.getElementById('entry-glosa').value = '';
+}
+
+// --- RENDERIZADOS ---
+function renderJournal() {
+    const tbody = document.getElementById('journal-tbody');
+    tbody.innerHTML = '';
+    
+    [...journal].reverse().forEach(entry => {
+        let isHaberSection = false;
+        let rowsHtml = '';
+
+        entry.lines.forEach((l, idx) => {
+            // Detectar la naturaleza del movimiento (con respaldo por si existen asientos viejos)
+            if (l.t === 'H') isHaberSection = true;
+            else if (l.t === 'D') isHaberSection = false;
+            else {
+                if (l.h > 0) isHaberSection = true;
+                if (l.d > 0) isHaberSection = false;
+            }
+
+            let indent = 0;
+            // 1. Sangría por jerarquía (Subcuentas mayores a 4 dígitos)
+            if (l.c.length > 4) indent += 1.5;
+            // 2. Sangría profunda obligatoria para las cuentas del Haber
+            if (isHaberSection) indent += 3;
+
+            rowsHtml += `
+                <tr>
+                    <td class="mono" style="font-size:0.75rem; text-align:center">${idx === 0 ? entry.date : ''}</td>
+                    <td class="mono" style="font-weight:600;color:var(--accent);text-align:center">${l.c}</td>
+                    <td style="padding-left:calc(1rem + ${indent}rem)">${l.n}</td>
+                    <td class="text-right mono">${l.p > 0 ? l.p.toFixed(2) : '-'}</td>
+                    <td class="text-right mono">${l.d > 0 ? l.d.toFixed(2) : '-'}</td>
+                    <td class="text-right mono">${l.h > 0 ? l.h.toFixed(2) : '-'}</td>
+                </tr>
+            `;
+        });
+        
+        // Glosa al final del asiento en cursiva
+        rowsHtml += `
+            <tr style="background:var(--surface2); border-bottom: 2px solid var(--border2)">
+                <td colspan="2"></td>
+                <td colspan="4" style="font-style:italic; color:var(--ink2); padding-left:1rem">
+                    v/r: ${entry.glosa} <span style="margin-left:1rem;color:var(--ink3);font-size:0.7rem">(REF: ${entry.id})</span>
+                </td>
+            </tr>
+        `;
+
+        tbody.innerHTML += rowsHtml;
+    });
+}
+
+function renderCatalog() {
+    const q = document.getElementById('cat-search').value.toLowerCase();
+    const tbody = document.getElementById('catalog-tbody');
+    const counter = document.getElementById('catalog-counter');
+    
+    const filtered = dbCatalog.filter(x => x.c.includes(q) || x.n.toLowerCase().includes(q));
+
+    counter.innerHTML = `Mostrando <b>${filtered.length.toLocaleString()}</b> de <b>${dbCatalog.length.toLocaleString()}</b> registros totales`;
+
+    tbody.innerHTML = filtered.map(x => `
+        <tr style="${x.l <= 2 ? 'font-weight:700;background:var(--bg)' : ''}">
+            <td class="mono">${x.c}</td>
+            <td style="padding-left:${(x.l-1)*15}px">${x.n}</td>
+            <td style="font-size:0.7rem;color:var(--ink3)">Nivel ${x.l}</td>
+        </tr>
+    `).join('');
+}
+
+// --- EXCEL PRO (ADAPTADO A ESTÁNDAR UNIVERSITARIO) ---
+async function exportExcel() {
+    if(journal.length === 0) return alert("Nada que exportar");
+    
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Diario Bancario');
+
+    ws.columns = [
+        { header: 'FECHA', key: 'f', width: 12 },
+        { header: 'CÓDIGO', key: 'c', width: 15 },
+        { header: 'DETALLE', key: 'n', width: 45 },
+        { header: 'PARCIAL', key: 'p', width: 15 },
+        { header: 'DEBE', key: 'd', width: 15 },
+        { header: 'HABER', key: 'h', width: 15 }
+    ];
+
+    ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFF' } };
+    ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '0F1117' } };
+    ws.getRow(1).alignment = { horizontal: 'center', vertical: 'middle' };
+
+    journal.forEach((e, journalIndex) => {
+        let isHaberSection = false;
+
+        // Añadir fila con el número del asiento (centrado)
+        const numRow = ws.addRow({ n: `- ${journalIndex + 1} -` });
+        numRow.getCell('n').alignment = { horizontal: 'center' };
+        numRow.getCell('n').font = { bold: true };
+
+        e.lines.forEach((l, index) => {
+            if (l.t === 'H') isHaberSection = true;
+            else if (l.t === 'D') isHaberSection = false;
+            else {
+                if (l.h > 0) isHaberSection = true;
+                if (l.d > 0) isHaberSection = false;
+            }
+
+            const r = ws.addRow({ 
+                f: index === 0 ? e.date : '', 
+                c: l.c, 
+                n: l.n, 
+                p: l.p > 0 ? l.p : null,
+                d: l.d > 0 ? l.d : null, 
+                h: l.h > 0 ? l.h : null 
+            });
+
+            let indent = 0;
+            // 1. Sangría de jerarquía para el Excel
+            if (l.c.length > 4) {
+                indent += 1; // Ligera sangría interna para subcuentas
+            } else {
+                // Negrita para cuentas principales (jerarquía alta)
+                r.getCell('c').font = { bold: true };
+                r.getCell('n').font = { bold: true };
+            }
+            
+            // 2. Sangría profunda OBLIGATORIA para ABSOLUTAMENTE TODAS las cuentas del Haber
+            if (isHaberSection) {
+                indent += 4;
+            }
+
+            if (indent > 0) {
+                r.getCell('n').alignment = { indent: indent };
+            }
+            
+            // Centrado de fecha y código
+            r.getCell('c').alignment = { horizontal: 'center' };
+            r.getCell('f').alignment = { horizontal: 'center' };
+
+            // Formato monetario
+            ['p', 'd', 'h'].forEach(col => {
+                const cell = r.getCell(col);
+                if(cell.value) cell.numFmt = '#,##0.00';
+            });
+        });
+
+        // Glosa final
+        const gRow = ws.addRow({ c: '', n: `v/r: ${e.glosa}` });
+        gRow.font = { italic: true };
+        gRow.getCell('n').alignment = { indent: 1 };
+        
+        ws.addRow([]); // Fila separadora visual entre asientos
+    });
+
+    const buf = await wb.xlsx.writeBuffer();
+    saveAs(new Blob([buf]), `Diario_SisBank_${Date.now()}.xlsx`);
+}
+
+function navigate(id) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    document.getElementById('view-'+id).classList.add('active');
+    document.getElementById('nav-'+id).classList.add('active');
+    if(id === 'catalogo') renderCatalog();
+}
+
+function showToast(m) {
+    const t = document.getElementById('toast');
+    t.textContent = m; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function resetDB() {
+    if(confirm("¿Borrar todo?")) {
+        localStorage.clear();
+        location.reload();
+    }
+}
+
+document.addEventListener('click', e => {
+    if(!e.target.closest('.autocomplete-wrapper')) {
+        document.querySelectorAll('.suggestions').forEach(s => s.style.display = 'none');
+    }
+});
+</script>
+</body>
+</html>
